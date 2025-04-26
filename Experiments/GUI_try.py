@@ -100,6 +100,7 @@ class PDF(FPDF):
             self.ln(3)  # Small gap after each comment
 
         self.set_text_color(0, 0, 0)
+
 # Streamlit setup
 st.set_page_config(layout="wide")
 
@@ -269,6 +270,7 @@ if uploaded_file:
             st.success(f"PDF report saved to: {pdf_path}")
         except Exception as e:
             st.error(f"Failed to save PDF report: {e}")
+        
         # Provide option to download it via Streamlit
         with open(pdf_path, "rb") as f:
             st.download_button(
