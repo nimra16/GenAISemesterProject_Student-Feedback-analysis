@@ -29,7 +29,6 @@ class PDF(FPDF):
         self.set_font('Arial', 'B', 10)
         self.cell(0, 10, f"Total Respondents: {total_respondents}", ln=True)
         self.ln(5)
-
     def add_bar_chart_image(self, bar_chart_path):
         self.image(bar_chart_path, x=None, y=None, w=180)
         self.ln(10)
@@ -39,67 +38,68 @@ class PDF(FPDF):
         aspect_terms = aspect_df[f"{aspect}_terms"].tolist()
         aspect_sentiments = aspect_df[f"{aspect}_polarity"].tolist()
 
-        self.add_page()  # 🚀 New page for each aspect
-
-        # Aspect Title Centered
+        self.add_page()
         self.set_font('Arial', 'B', 16)
         self.cell(0, 10, aspect, ln=True, align='C')
         self.ln(5)
 
-        # Discussion info
         self.set_font('Arial', '', 11)
         info_text = f"{discussed_count} students discussed this aspect out of {total_respondents} total respondents."
         self.cell(0, 10, info_text, ln=True, align='C')
         self.ln(10)
 
-        # Word Cloud
         self.image(wordcloud_image, x=None, y=None, w=180)
         self.ln(10)
 
         self.set_font('Arial', '', 10)
 
-        for comment, term, term_sentiment in zip(comments, aspect_terms, aspect_sentiments):
-            # Highlighted comment background
-            self.set_fill_color(240, 240, 240)            
-            # remove new line characters
+        for comment, term, sentiment in zip(comments, aspect_terms, aspect_sentiments):
+            self.set_fill_color(240, 240, 240)
             comment = comment.replace("\n", " ")
-            remaining_text = comment             
-            idx = remaining_text.lower().find(term.lower())  # Case-insensitive search
-            
+            remaining_text = comment
+            found_term = False  # Flag to track if any aspect term is found
+
+            idx = remaining_text.lower().find(term.lower())
             if idx != -1:
-                # Print text before the term (normal)
+                # Print text before the term
                 if idx > 0:
                     normal_text = remaining_text[:idx]
                     self.set_font('Arial', '', 10)
                     self.set_text_color(0, 0, 0)
                     self.multi_cell(0, 5, normal_text, align='L', border=1, fill=True)
-                
-                # Print the term (highlighted)
-                highlighted_text = remaining_text[idx:idx+len(term)]
-                # Determine sentiment for the term (full term found in the comment)
-                term_sentiment = term_sentiment.lower()
 
-                # Set text color based on sentiment
-                if term_sentiment == 'positive':
-                    self.set_text_color(0, 128, 0)  # Green
-                elif term_sentiment == 'negative':
-                    self.set_text_color(255, 0, 0)  # Red
+                # Highlight the term
+                highlighted_text = remaining_text[idx:idx + len(term)]
+                sentiment = sentiment.lower()
+
+                if sentiment == 'positive':
+                    self.set_text_color(0, 128, 0)
+                elif sentiment == 'negative':
+                    self.set_text_color(255, 0, 0)
                 else:
-                    self.set_text_color(255, 165, 0)  # Orange
+                    self.set_text_color(255, 165, 0)
 
                 self.set_font('Arial', 'B', 10)
                 self.multi_cell(0, 5, highlighted_text, align='L', border=1, fill=True)
+                remaining_text = remaining_text[idx + len(highlighted_text):]  # Update remaining text after the term
+                found_term = True  # Mark that a term was found
 
-                # Update remaining_text
-                remaining_text = remaining_text[idx + len(highlighted_text):]  # Move past the highlighted text
-            else:
-                # No more aspect terms in text
+            # After processing all terms, print the remaining text (if any)
+            if found_term and remaining_text:
                 self.set_font('Arial', '', 10)
                 self.set_text_color(0, 0, 0)
                 self.multi_cell(0, 5, remaining_text, align='L', border=1, fill=True)
-            self.ln(3)  # Small gap after each comment
+            
+            # If no aspect term was found, print the entire comment without highlights
+            elif not found_term:
+                self.set_font('Arial', '', 10)
+                self.set_text_color(0, 0, 0)
+                self.multi_cell(0, 5, remaining_text, align='L', border=1, fill=True)
+            
+            self.ln(3)
+        self.set_text_color(0, 0, 0) # Reset text color after writing comments
 
-        self.set_text_color(0, 0, 0)
+
 # Streamlit setup
 st.set_page_config(layout="wide")
 
@@ -124,7 +124,10 @@ uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
+    df = df.dropna(subset=['FacultyName', 'Comments'])
+    # df['FacultyName'] = df['FacultyName'].str.strip()
+    df = df[df['Target'] == 'Teacher']
+    semester_name = os.path.splitext(uploaded_file.name)[0]
     teachers = df['FacultyName'].unique()
     selected_teacher = st.sidebar.selectbox("Select a Teacher", teachers)
     selected_course = "All"
@@ -261,8 +264,8 @@ if uploaded_file:
             discussed_count = len(aspect_df)            
             pdf.add_aspect_info(aspect, discussed_count, total_respondents, path, aspect_df)
 
-        os.makedirs("Reports", exist_ok=True)
-        pdf_path = os.path.join("Reports", f"report_{selected_teacher.replace(' ', '_')}_{selected_course}_{selected_class}.pdf")
+        os.makedirs("Reports/"+semester_name, exist_ok=True)
+        pdf_path = os.path.join("Reports/"+semester_name, f"{selected_teacher.replace(' ', '_')}_{selected_course}_{selected_class}.pdf")
 
         try:
             pdf.output(pdf_path, dest='F')  # 'F' stands for File

@@ -25,7 +25,8 @@ Report/
 Datasets/
 outputs/
 cache/
-
+EXoeriments/Datasets
+EXoeriments/Reports
 # Log or analysis outputs
 *.log
 *.tmp
