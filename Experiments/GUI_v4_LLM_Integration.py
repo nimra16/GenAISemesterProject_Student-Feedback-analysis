@@ -13,8 +13,11 @@ import re
 # Helper Functions for LLM Processing
 # =========================================
 # Function to parse LLM JSON safely
+
+
 def parse_json_safe(response_text):
     try:
+        response_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
         json_start = response_text.find('{')
         json_end = response_text.rfind('}') + 1
         json_substring = response_text[json_start:json_end]
@@ -99,18 +102,34 @@ def process_teacher_feedback_with_llm(df, selected_teacher):
                         # print("Extracted aspect Type", type(result_dict[aspect].get("Aspect Terms", "")))                       
                         # teacher_df.at[idx, f"{aspect}_terms"] = ", ".join(aspect_terms) if isinstance(aspect_terms := result_dict[aspect].get("Aspect Terms", ""), list) else str(aspect_terms)
 
-                        if isinstance(result_dict[aspect], dict):
-                            aspect_terms = result_dict[aspect].get("Aspect Terms", [])
-                        elif isinstance(result_dict[aspect], list):
-                            aspect_terms = result_dict[aspect]  # Keep it as a list
+                        aspect_data = result_dict[aspect]
+
+                        # Initialize defaults
+                        aspect_terms = "None"
+                        polarity = ""
+
+                        if isinstance(aspect_data, dict):
+                            # Case: aspect is a dict containing Aspect Terms and Polarity
+                            aspect_terms = aspect_data.get("Aspect Terms", "None")
+                            polarity = aspect_data.get("Polarity", "")
+                        elif isinstance(aspect_data, list):
+                            # Case: aspect is a list of aspect terms, polarity might be separately given
+                            aspect_terms = aspect_data
+                            polarity = result_dict.get("Polarity", "")
+                        elif isinstance(aspect_data, str):
+                            # Very rare case: if it's just a plain string
+                            aspect_terms = aspect_data
+                            polarity = result_dict.get("Polarity", "")
+                        # Convert aspect_terms to comma-separated string if it's a list
+                        if isinstance(aspect_terms, list):
+                            aspect_terms = ",".join(aspect_terms) if aspect_terms else "None"
                         else:
-                            aspect_terms = []
+                            aspect_terms = str(aspect_terms)
 
-                        # Convert the list to a comma-separated string if there are multiple terms
-                        teacher_df.at[idx, f"{aspect}_terms"] = ",".join(aspect_terms) if isinstance(aspect_terms, list) and aspect_terms else str(aspect_terms)
-
-
-                        teacher_df.at[idx, f"{aspect}_polarity"] = result_dict[aspect].get("Polarity", "")
+                        # Save to dataframe
+                        teacher_df.at[idx, f"{aspect}_terms"] = aspect_terms
+                        teacher_df.at[idx, f"{aspect}_polarity"] = polarity
+                        # print(f"Aspect: {aspect}, Terms: {aspect_terms}, Polarity: {polarity}")                        
         except Exception as e:
             print(f"Error at index {idx}: {e}")
             print(f"Response: {result_json}")
@@ -186,7 +205,11 @@ def generate_bar_chart(teacher_df, aspect_categories):
         hoverlabel=dict(font_size=12, font_family="Arial", align='left')
     )
     st.plotly_chart(fig, use_container_width=True)    
+    bar_graph_path = os.path.join(tempfile.gettempdir(), "bar_graph.png")
+    fig.write_image(bar_graph_path)
+    return bar_graph_path
 
+# Function to generate word clouds for each aspect
 def generate_wordcloud(teacher_df, aspect_categories):
     # Word cloud generation
     negation_words = {"not", "no", "never", "cannot", "can't", "doesn't", "won't", "don't", "didn't"}
@@ -285,7 +308,7 @@ class PDF(FPDF):
 
                     # Highlight the term
                     highlighted_text = remaining_text[idx:idx + len(term)]
-                    sentiment = sentiment.lower()
+                    sentiment = str(sentiment).lower()
 
                     if sentiment == 'positive':
                         self.set_text_color(0, 128, 0)
@@ -293,6 +316,8 @@ class PDF(FPDF):
                         self.set_text_color(255, 0, 0)
                     else:
                         self.set_text_color(255, 165, 0)
+                    # else:
+                    #     self.set_text_color(0, 0, 0)
 
                     self.set_font('Arial', 'B', 10)
                     self.multi_cell(0, 5, highlighted_text, align='L', border=1, fill=True)
@@ -375,9 +400,8 @@ if uploaded_file:
         aspect_categories = ["Teaching Pedagogy", "Knowledge", "Fair in Assessment", "Experience", "Behavior"]
 
         # Generate bar chart
-        generate_bar_chart(teacher_df, aspect_categories)
-        bar_graph_path = os.path.join(tempfile.gettempdir(), "bar_graph.png")
-        # fig.write_image(bar_graph_path)
+        bar_graph_path =generate_bar_chart(teacher_df, aspect_categories)
+
 
         # Generate word clouds
         wordcloud_images = generate_wordcloud(teacher_df, aspect_categories)
@@ -402,7 +426,8 @@ if uploaded_file:
 
         for aspect, path in wordcloud_paths:
             aspect_df = teacher_df[
-                teacher_df[f"{aspect}_terms"].fillna("").str.strip().pipe(lambda s: (s != "") & (s.str.lower() != "none"))
+                teacher_df[f"{aspect}_terms"].fillna("").str.strip().pipe(lambda s: (s != "") & (s.str.lower() != "none") )
+                
             ]
             discussed_count = len(aspect_df)            
             pdf.add_aspect_info(aspect, discussed_count, total_respondents, path, aspect_df)
