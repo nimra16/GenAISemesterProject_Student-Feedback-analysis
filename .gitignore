@@ -6,6 +6,7 @@ desktop.ini
 # Python cache
 __pycache__/
 *.py[cod]
+*.gdoc
 
 # Virtual environments
 .venv/
@@ -15,18 +16,13 @@ venv/
 # Sensitive files
 .env
 
-# Office and doc files
-*.pptx
-*.pdf
-*.gdoc
 
 # App-specific folders
-Report/
+Reports/
 Datasets/
 outputs/
 cache/
-EXoeriments/Datasets
-EXoeriments/Reports
+.streamlit/
 # Log or analysis outputs
 *.log
 *.tmp
